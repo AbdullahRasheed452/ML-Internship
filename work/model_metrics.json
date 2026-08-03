@@ -1,0 +1,10 @@
+{
+  "model": "Random Forest",
+  "split": "grouped by client",
+  "precision_at_20": 0.65,
+  "precision_at_50": 0.7,
+  "baseline_precision_at_20": 0.3,
+  "baseline_precision_at_50": 0.26,
+  "total_pages_ranked": 17925,
+  "month_used": "2026-03"
+}
