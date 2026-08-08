@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Refresh Priority Scoring: Ranking Content for Review Using Search Performance Data</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body { font-family: Georgia, serif; max-width: 780px; margin: 40px auto; padding: 0 20px; line-height: 1.6; color: #222; }
+  h1 { font-size: 28px; margin-bottom: 4px; }
+  h2 { font-size: 20px; margin-top: 40px; border-bottom: 2px solid #ddd; padding-bottom: 6px; }
+  .subtitle { color: #666; font-size: 14px; margin-bottom: 30px; }
+  .abstract { background: #f7f7f7; padding: 20px; border-left: 4px solid #444; font-size: 15px; }
+  table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+  th, td { border: 1px solid #ccc; padding: 8px 12px; text-align: left; font-size: 14px; }
+  th { background: #eee; }
+  img { max-width: 100%; margin: 20px 0; }
+  code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-size: 13px; }
+  .limits, .credit { background: #fff8e6; padding: 15px; border-left: 4px solid #d9a300; margin: 20px 0; font-size: 14px; }
+  ul { font-size: 15px; }
+  footer { margin-top: 60px; font-size: 13px; color: #777; border-top: 1px solid #ddd; padding-top: 20px; }
+</style>
+</head>
+<body>
+
+<h1>Refresh Priority Scoring: Ranking Content for Review Using Search Performance Data</h1>
+<p class="subtitle">Abdullah Rasheed &middot; FlyRank ML Internship 2026 &middot; Lane 2: Refresh / Content Opportunity Scoring</p>
+
+<div class="abstract">
+<strong>Abstract.</strong> This project asks which content pages a reviewer should check first when deciding what to refresh, given limited review time. Using March 2026 search performance data from FlyRank's internship warehouse, a Random Forest model was trained on pre-decision features (impressions, position, CTR, word count, content age) to predict whether a page's traffic was declining, and validated using a client-grouped holdout split. The model reached a Precision@50 of 0.700, compared to 0.260 for a simple hand-written baseline rule. The result is a ranked action queue of 17,925 pages with reason codes and recommended actions, intended as decision support for a human reviewer, not as an automated or causal claim.
+</div>
+
+<h2>1. Introduction</h2>
+<p>Content teams with limited review capacity need a way to decide which pages to check first. A simple hand-written rule can work, but it can only combine a couple of signals at a time. This project asks: can a trained model, using only information known before a decision is made, produce a better-ranked review queue than a simple rule, on real search performance data?</p>
+
+<h2>2. Data</h2>
+<ul>
+<li><strong>Source:</strong> FlyRank internship warehouse release (Hugging Face, pseudonymized)</li>
+<li><strong>Tables used:</strong> <code>fact_content_daily_performance</code>, <code>dim_content</code>, <code>dim_clients</code></li>
+<li><strong>Time window:</strong> March 2026 (a full month, kept separate from the sealed final month, June 2026)</li>
+<li><strong>Excluded on purpose:</strong> <code>health_score</code>, <code>priority_score</code>, <code>action_type</code> &mdash; these are the product's own decisions, not raw observed data, and using them would just teach a model to copy existing rules</li>
+<li><strong>Privacy:</strong> all client and content identifiers are pseudonymized; no client names, URLs, or raw queries appear anywhere in this work</li>
+</ul>
+
+<h2>3. Methodology</h2>
+<p><strong>Label:</strong> a page is labeled "declining" if its impressions dropped more than 20% from the first half of March to the second half.</p>
+<p><strong>Features</strong> (all built only from the first half of March, so nothing from the label window leaks in): average impressions, average search position, average CTR, word count, and content age in days.</p>
+<p><strong>Baseline:</strong> a transparent rule comparing each page's CTR to the average CTR for its position tier &mdash; the bigger the gap, the higher the score.</p>
+<p><strong>Model:</strong> a Random Forest classifier, chosen for its ability to combine multiple signals and provide feature importance.</p>
+<p><strong>Validation:</strong> a client-grouped split, so no client appears in both training and test data. This avoids the model memorizing one client's specific pattern instead of learning something that generalizes.</p>
+<p><strong>Leakage check:</strong> an early version of the impressions feature used the full month, including the second half the label was built from. This produced a near-perfect but meaningless score. It was caught and fixed by restricting all features to first-half-of-month data only.</p>
+
+<h2>4. Results</h2>
+<table>
+<tr><th>Metric</th><th>Baseline rule</th><th>Random Forest model</th></tr>
+<tr><td>Precision@20</td><td>0.300</td><td>0.650</td></tr>
+<tr><td>Precision@50</td><td>0.260</td><td>0.700</td></tr>
+</table>
+<p>On this client-held-out test split, the model outperformed the baseline rule at both cutoffs. This is an observed, directional result on one split of one month of data, not a guarantee that it will always outperform the baseline on other data.</p>
+
+<h2>5. Reason Code Distribution</h2>
+<img src="../work/figures/reason_code_counts.png" alt="Bar chart showing count of pages by reason code">
+<p>Most flagged pages fall under <code>low_ctr_for_position</code>, meaning they already have visibility but are not converting it into clicks &mdash; consistent with the pattern found in the earlier baseline signal check.</p>
+
+<h2>6. Limitations</h2>
+<div class="limits">
+This work cannot claim:
+<ul>
+<li>That fixing a flagged page will guarantee a traffic recovery</li>
+<li>That the model performs the same way on other months or on clients not seen in this data</li>
+<li>Any knowledge of how Google's search ranking algorithm works</li>
+<li>That the ranked queue measures content quality &mdash; only a risk pattern observed in this sample</li>
+</ul>
+Real limits of the data itself:
+<ul>
+<li>Clients have unequal history, so trends are not equally reliable across every client</li>
+<li>Only a small share of rows have GA4 engagement data; most rows are search-only</li>
+</ul>
+</div>
+
+<h2>7. Ranked Recommendations</h2>
+<table>
+<tr><th>Reason code</th><th>Recommended action</th></tr>
+<tr><td>low_ctr_for_position</td><td>Review title and meta description</td></tr>
+<tr><td>aging_content_risk</td><td>Schedule a content refresh</td></tr>
+<tr><td>visible_page_declining</td><td>Prioritize for review this week</td></tr>
+<tr><td>general_decline_risk</td><td>Monitor, low urgency</td></tr>
+</table>
+<p><strong>Should never be automated:</strong> auto-deleting or unpublishing a page based on this score, auto-rewriting content without human review, or making client-facing promises based on this score alone. A human reviewer should always confirm a page's current traffic and check for confounding factors (site redesigns, competing pages) before acting.</p>
+
+<h2>8. Reproducibility</h2>
+<p>All notebooks, data contracts, and code for this project are available in the public repository:</p>
+<p><a href="https://github.com/AbdullahRasheed452/ML-Internship">github.com/AbdullahRasheed452/ML-Internship</a></p>
+<p>Key notebooks: <code>work/notebooks/w03_data_contract.ipynb</code>, <code>w04_baseline_score.ipynb</code>, <code>w05_model.ipynb</code>, <code>w06_validation_audit.ipynb</code>, <code>w07_action_playbook.ipynb</code>, <code>capstone.ipynb</code></p>
+
+<footer>
+<div class="credit">
+Built on the FlyRank ML Internship dataset &mdash; <a href="https://flyrank.ai">flyrank.ai</a>
+</div>
+</footer>
+
+</body>
+</html>
